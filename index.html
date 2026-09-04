@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="theme-color" content="#0a0a0b" />
+  <meta name="description" content="Professional Velocity Based Training (VBT) tracker. Track barbell speed, distance, and reps using only your phone camera." />
+  <title>BarVelocity — VBT Tracker</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- Splash / Onboarding -->
+  <div id="splash" class="screen active">
+    <div class="splash-content">
+      <div class="logo">
+        <div class="logo-mark">BV</div>
+        <h1>BarVelocity</h1>
+        <p class="tagline">Professional Velocity Based Training</p>
+      </div>
+      <div class="splash-features">
+        <div class="feature"><span class="dot"></span> Real-time bar speed & path</div>
+        <div class="feature"><span class="dot"></span> Mean / Peak velocity & ROM</div>
+        <div class="feature"><span class="dot"></span> Auto rep detection + velocity loss</div>
+        <div class="feature"><span class="dot"></span> Works with any phone camera</div>
+      </div>
+      <button id="btn-start" class="btn primary large">Get Started</button>
+      <p class="hint">Requires a high-contrast marker on the end of the bar</p>
+    </div>
+  </div>
+
+  <!-- Setup Screen -->
+  <div id="setup" class="screen">
+    <header class="top-bar">
+      <button class="icon-btn" id="btn-back-setup" aria-label="Back">←</button>
+      <h2>Setup</h2>
+      <div style="width:40px"></div>
+    </header>
+
+    <div class="setup-scroll">
+      <section class="card">
+        <h3>1. Marker</h3>
+        <p>Attach a bright solid color marker (recommended: neon green or orange tape/sticker) to the end of the barbell sleeve. Size 4–8 cm diameter works best.</p>
+      </section>
+
+      <section class="card">
+        <h3>2. Camera Position</h3>
+        <p>Place your phone on a tripod or stable surface so the camera views the <strong>side</strong> of the bar. The full range of motion of the marker must stay in frame. Keep the phone parallel to the bar path (vertical for most lifts).</p>
+      </section>
+
+      <section class="card">
+        <h3>3. Calibration</h3>
+        <label class="field">
+          <span>Marker diameter (cm)</span>
+          <input type="number" id="marker-diameter" value="5.0" min="1" max="20" step="0.1" inputmode="decimal" />
+        </label>
+        <label class="field">
+          <span>Unit preference</span>
+          <select id="unit-pref">
+            <option value="metric">Metric (m/s, kg)</option>
+            <option value="imperial">Imperial (ft/s, lb)</option>
+          </select>
+        </label>
+      </section>
+
+      <section class="card">
+        <h3>4. Session</h3>
+        <label class="field">
+          <span>Exercise</span>
+          <select id="exercise">
+            <option value="squat">Back Squat</option>
+            <option value="bench">Bench Press</option>
+            <option value="deadlift">Deadlift</option>
+            <option value="ohp">Overhead Press</option>
+            <option value="row">Barbell Row</option>
+            <option value="other">Other</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Load</span>
+          <div class="input-row">
+            <input type="number" id="load" value="100" min="0" step="0.5" inputmode="decimal" />
+            <span class="unit-label" id="load-unit">kg</span>
+          </div>
+        </label>
+        <label class="field">
+          <span>Target mean velocity (m/s)</span>
+          <input type="number" id="target-vel" value="0.50" min="0.1" max="2.0" step="0.05" inputmode="decimal" />
+        </label>
+        <label class="field">
+          <span>Velocity loss cutoff (%)</span>
+          <input type="number" id="vel-loss" value="20" min="5" max="50" step="1" inputmode="numeric" />
+        </label>
+      </section>
+
+      <button id="btn-open-camera" class="btn primary large full">Open Camera & Calibrate</button>
+    </div>
+  </div>
+
+  <!-- Main Tracker Screen -->
+  <div id="tracker" class="screen">
+    <div class="camera-wrap">
+      <video id="video" playsinline muted autoplay></video>
+      <canvas id="overlay"></canvas>
+
+      <!-- Live HUD -->
+      <div class="hud top-hud">
+        <div class="hud-pill">
+          <span class="label">REPS</span>
+          <span class="value" id="hud-reps">0</span>
+        </div>
+        <div class="hud-pill accent">
+          <span class="label">MEAN</span>
+          <span class="value mono" id="hud-mean">—</span>
+        </div>
+        <div class="hud-pill">
+          <span class="label">PEAK</span>
+          <span class="value mono" id="hud-peak">—</span>
+        </div>
+      </div>
+
+      <div class="hud velocity-display">
+        <div class="vel-number mono" id="live-vel">0.00</div>
+        <div class="vel-unit" id="vel-unit">m/s</div>
+        <div class="vel-status" id="vel-status">Ready</div>
+      </div>
+
+      <div class="hud bottom-hud">
+        <div class="hud-row">
+          <span>ROM <strong id="hud-rom">—</strong></span>
+          <span>Loss <strong id="hud-loss">—</strong></span>
+          <span>Power <strong id="hud-power">—</strong></span>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill" id="loss-bar"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Controls -->
+    <div class="controls">
+      <button class="ctrl-btn" id="btn-sample-color" title="Sample color">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+        <span>Color</span>
+      </button>
+      <button class="ctrl-btn primary" id="btn-toggle-track">
+        <span id="track-label">Start Tracking</span>
+      </button>
+      <button class="ctrl-btn" id="btn-end-set">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+        <span>End Set</span>
+      </button>
+    </div>
+
+    <!-- Floating action buttons -->
+    <button class="fab settings" id="btn-settings" aria-label="Settings">⚙</button>
+  </div>
+
+  <!-- Color sampling mode — bottom banner only so camera stays tappable -->
+  <div id="color-mode" class="color-banner hidden">
+    <div class="color-banner-inner">
+      <div class="color-preview" id="color-preview"></div>
+      <div class="color-banner-text">
+        <strong>Tap the marker / ball</strong>
+        <span>on the camera view to lock its color</span>
+      </div>
+      <button class="btn secondary small" id="btn-cancel-sample">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Set Summary Modal -->
+  <div id="summary" class="modal hidden">
+    <div class="modal-sheet">
+      <div class="sheet-handle"></div>
+      <h2>Set Summary</h2>
+      <div class="summary-grid">
+        <div class="stat">
+          <span class="stat-label">Reps</span>
+          <span class="stat-value" id="sum-reps">0</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Best Mean</span>
+          <span class="stat-value mono" id="sum-best">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Avg Mean</span>
+          <span class="stat-value mono" id="sum-avg">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Vel Loss</span>
+          <span class="stat-value" id="sum-loss">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Peak Vel</span>
+          <span class="stat-value mono" id="sum-peak">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Avg ROM</span>
+          <span class="stat-value mono" id="sum-rom">—</span>
+        </div>
+      </div>
+
+      <div class="rep-list" id="rep-list"></div>
+
+      <canvas id="summary-chart" height="160"></canvas>
+
+      <div class="sheet-actions">
+        <button class="btn secondary" id="btn-new-set">New Set</button>
+        <button class="btn primary" id="btn-save-session">Save & Continue</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings / History drawer -->
+  <div id="drawer" class="drawer hidden">
+    <div class="drawer-content">
+      <header>
+        <h2>Session & Settings</h2>
+        <button class="icon-btn" id="btn-close-drawer">✕</button>
+      </header>
+      <div class="drawer-body">
+        <section>
+          <h3>Current Session</h3>
+          <div id="session-list" class="session-list"></div>
+        </section>
+        <section>
+          <h3>Audio Feedback</h3>
+          <label class="toggle">
+            <input type="checkbox" id="audio-enabled" checked />
+            <span>Beeps on rep / cutoff</span>
+          </label>
+        </section>
+        <section>
+          <h3>Tracking Sensitivity</h3>
+          <label class="field">
+            <span>Min blob size</span>
+            <input type="range" id="min-blob" min="10" max="300" value="40" />
+          </label>
+          <label class="field">
+            <span>Hue tolerance (±°)</span>
+            <input type="range" id="hue-tol" min="10" max="55" value="28" />
+          </label>
+          <label class="field">
+            <span>Min saturation</span>
+            <input type="range" id="sat-min" min="5" max="60" value="25" />
+          </label>
+          <p style="font-size:12px;color:var(--text-muted);margin-top:8px;line-height:1.4">
+            If the marker is not found: tap <strong>Color</strong>, then tap the marker itself. Increase hue tolerance if still missing.
+          </p>
+        </section>
+        <button class="btn danger full" id="btn-clear-history">Clear History</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
